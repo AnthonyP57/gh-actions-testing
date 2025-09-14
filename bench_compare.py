@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Benchmark performance between branch base, branch tip, and main.
+Benchmark performance between branch origin, branch tip, and main at PR creation.
 
 Usage:
   python bench_compare.py [base_branch]
@@ -45,33 +45,32 @@ if __name__ == "__main__":
     # Ensure base branch exists
     subprocess.run(f"git fetch origin {base_branch}:{base_branch}", shell=True, check=False)
 
-    # Find merge base
-    merge_base = try_output(f"git merge-base {base_branch} HEAD")
-    if not merge_base:
-        print(f"ERROR: couldn't find merge-base with {base_branch}", file=sys.stderr)
-        sys.exit(2)
-
-    # Branch start = state before any branch commits
-    branch_start = merge_base
-
     # Branch tip = HEAD
     branch_end = "HEAD"
 
-    # Main tip
+    # Find the commit from which the branch was created
+    branch_base = try_output(
+        f"git rev-list --first-parent HEAD ^{base_branch} | tail -n 1"
+    )
+    if not branch_base:
+        print("ERROR: could not find branch creation commit", file=sys.stderr)
+        sys.exit(2)
+
+    # Main tip (current main)
     main_ref = f"origin/{base_branch}" if try_output(f"git rev-parse --verify origin/{base_branch}") else base_branch
 
     regress = False
     try:
         print("Running benchmarks...")
 
-        start = benchmark_commit(branch_start, "Branch base (pre-branch)")
+        start = benchmark_commit(branch_base, "Branch base (creation)")
         end   = benchmark_commit(branch_end, "Branch tip (HEAD)")
-        main  = benchmark_commit(main_ref, "Main branch tip")
+        main  = benchmark_commit(main_ref, "Current main tip")
 
         print("\n--- Performance Comparison ---")
         print(f"Branch base: {start:.4f} s")
         print(f"Branch tip:  {end:.4f} s")
-        print(f"Main tip:    {main:.4f} s")
+        print(f"Current main tip: {main:.4f} s")
 
         if end > start * 1.10:
             print("❌ Regression vs branch base")
