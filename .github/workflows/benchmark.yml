@@ -32,20 +32,12 @@ jobs:
 
       - id: benchmark
         name: Run benchmark comparison
-        continue-on-error: true   # <-- do not fail the job yet
+        continue-on-error: true
         run: |
           BASE="${{ github.event.inputs.base-branch || 'main' }}"
           set -o pipefail
           python bench_compare.py "$BASE" | tee bench_results.txt
-          exit_code=${PIPESTATUS[0]}
-
-          # Save benchmark results for later
-          echo "results<<EOF" >> $GITHUB_OUTPUT
-          cat bench_results.txt >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-          # Save exit code for final step
-          echo $exit_code > .exit_code
+          echo $? > .exit_code
 
       - name: Upload benchmark results
         uses: actions/upload-artifact@v4
@@ -55,15 +47,16 @@ jobs:
 
       - name: Comment results on PR
         if: github.event_name == 'pull_request'
-        uses: peter-evans/create-or-update-comment@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          issue-number: ${{ github.event.pull_request.number }}
-          body: |
-            ## 🔬 Benchmark Results
-            ```
-            ${{ steps.benchmark.outputs.results }}
-            ```
+        run: |
+          echo "## 🔬 Benchmark Results" > comment.md
+          echo '```' >> comment.md
+          cat bench_results.txt >> comment.md
+          echo '```' >> comment.md
+
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --body-file comment.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Fail if regression detected
         run: exit $(cat .exit_code)
