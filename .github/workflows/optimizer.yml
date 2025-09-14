@@ -6,13 +6,16 @@ on:
 
 permissions:
   contents: read
-  issues: write
   pull-requests: write
 
 jobs:
   optimizer:
-    if: ${{ github.event.issue.pull_request && contains(github.event.comment.body, '/optimize') }}
+    # Run only when comment is on a PR and starts with /optimize
+    if: >
+      github.event.issue.pull_request != null &&
+      startsWith(github.event.comment.body, '/optimize')
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -24,13 +27,12 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Run optimizer
-        id: optimizer
+      - name: Install dependencies
         run: |
-          python optimizer.py | tee optimizer_results.txt
-          echo "results<<EOF" >> $GITHUB_OUTPUT
-          cat optimizer_results.txt >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Run optimizer
+        run: python optimizer.py | tee optimizer_results.txt
 
       - name: Upload optimizer results
         uses: actions/upload-artifact@v4
@@ -38,13 +40,14 @@ jobs:
           name: optimizer-results
           path: optimizer_results.txt
 
-      - name: Comment optimizer results on PR
-        uses: peter-evans/create-or-update-comment@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          issue-number: ${{ github.event.issue.number }}
-          body: |
-            ## ⚡ Optimizer Results
-            ```
-            ${{ steps.optimizer.outputs.results }}
-            ```
+      - name: Comment results on PR
+        run: |
+          echo "## ⚡ Optimizer Results" > comment.md
+          echo '```' >> comment.md
+          cat optimizer_results.txt >> comment.md
+          echo '```' >> comment.md
+
+          gh pr comment ${{ github.event.issue.number }} \
+            --body-file comment.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
