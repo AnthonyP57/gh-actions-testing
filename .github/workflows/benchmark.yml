@@ -18,6 +18,7 @@ permissions:
 jobs:
   benchmark:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -36,11 +37,14 @@ jobs:
           set -o pipefail
           python bench_compare.py "$BASE" | tee bench_results.txt
           exit_code=${PIPESTATUS[0]}
+
+          # Save benchmark results to output
           echo "results<<EOF" >> $GITHUB_OUTPUT
           cat bench_results.txt >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-          exit $exit_code
 
+          # Save exit code for later
+          echo $exit_code > .exit_code
 
       - name: Upload benchmark results
         uses: actions/upload-artifact@v4
@@ -59,3 +63,6 @@ jobs:
             ```
             ${{ steps.benchmark.outputs.results }}
             ```
+
+      - name: Fail if regression detected
+        run: exit $(cat .exit_code)
