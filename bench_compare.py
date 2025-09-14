@@ -5,7 +5,12 @@ Benchmark and compare performance between commits.
 Usage:
   python bench_compare.py [base_branch]
 """
-import subprocess, time, statistics, sys, os
+
+import subprocess
+import time
+import statistics
+import sys
+import os
 
 def run_output(cmd):
     return subprocess.check_output(cmd, shell=True).decode().strip()
@@ -26,6 +31,7 @@ def time_run(cmd, runs=5):
     return statistics.median(times)
 
 def benchmark_commit(commit, label, filepath="main.py"):
+    # Checkout the file from the specific commit
     subprocess.run(f"git checkout {commit} -- {filepath}", shell=True, check=True)
     result = time_run(f"python {filepath}")
     print(f"{label}: {result:.4f} s")
@@ -34,25 +40,25 @@ def benchmark_commit(commit, label, filepath="main.py"):
 if __name__ == "__main__":
     base_branch = sys.argv[1] if len(sys.argv) > 1 else "main"
 
-    # Resolve base commit
-    candidates = [
-        f"git merge-base origin/{base_branch} HEAD",
-        f"git merge-base {base_branch} HEAD",
-        f"git rev-parse origin/{base_branch}",
-        f"git rev-parse {base_branch}"
-    ]
+    # Ensure base branch exists (useful in CI)
+    subprocess.run(f"git fetch origin {base_branch}:{base_branch}", shell=True, check=False)
 
-    base_commit = None
-    for c in candidates:
-        val = try_output(c)
-        if val:
-            base_commit = val
-            break
-
-    if base_commit is None:
-        print(f"ERROR: couldn't resolve base commit for branch '{base_branch}'", file=sys.stderr)
+    # Find merge base (common ancestor between branch and base)
+    merge_base = try_output(f"git merge-base {base_branch} HEAD")
+    if not merge_base:
+        print(f"ERROR: couldn't find merge-base with {base_branch}", file=sys.stderr)
         sys.exit(2)
 
+    # Branch start = first commit after merge-base on the branch
+    branch_start = try_output(f"git rev-list --reverse {merge_base}..HEAD | head -n 1") or merge_base
+
+    # Branch end = HEAD
+    branch_end = "HEAD"
+
+    # Main = tip of base branch
+    main_ref = f"origin/{base_branch}" if try_output(f"git rev-parse --verify origin/{base_branch}") else base_branch
+
+    # Preserve current main.py
     saved_main = None
     if os.path.exists("main.py"):
         with open("main.py", "rb") as f:
@@ -60,32 +66,18 @@ if __name__ == "__main__":
 
     regress = False
     try:
-
-        # Find merge base (common ancestor)
-        merge_base = try_output(f"git merge-base origin/{base_branch} HEAD")
-        if not merge_base:
-            print(f"ERROR: couldn't find merge-base with {base_branch}", file=sys.stderr)
-            sys.exit(2)
-
-        # Branch start = first commit after merge-base on the PR branch
-        branch_start = try_output(f"git rev-list {merge_base}..HEAD | tail -n 1") or merge_base
-
-        # Branch end = HEAD
-        branch_end = "HEAD"
-
-        # Main = tip of base branch
-        main_ref = f"origin/{base_branch}" if try_output(f"git rev-parse --verify origin/{base_branch}") else base_branch
-
+        # Benchmark commits
         start = benchmark_commit(branch_start, "Branch start")
         end   = benchmark_commit(branch_end, "Branch end")
         main  = benchmark_commit(main_ref, "Main")
 
-
+        # Show comparison
         print("\n--- Performance Comparison ---")
         print(f"Branch start: {start:.4f} s")
         print(f"Branch end:   {end:.4f} s")
         print(f"Main:         {main:.4f} s")
 
+        # Regression check
         if end > start * 1.10:
             print("❌ Regression vs branch start")
             regress = True
@@ -99,6 +91,7 @@ if __name__ == "__main__":
             print("✅ OK vs main")
 
     finally:
+        # Restore main.py
         try:
             subprocess.run("git checkout HEAD -- main.py", shell=True, check=True)
         except Exception:
@@ -107,5 +100,4 @@ if __name__ == "__main__":
                     f.write(saved_main)
 
     if regress:
-        sys.exit(1)  # must be OUTSIDE the finally
-
+        sys.exit(1)  # Indicate regression for CI
