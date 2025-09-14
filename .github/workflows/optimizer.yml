@@ -6,12 +6,12 @@ on:
 
 permissions:
   contents: read
-  issues: write         # ✅ required to comment
-  pull-requests: write  # ✅ required to comment on PRs
+  issues: write
+  pull-requests: write
 
 jobs:
   optimizer:
-    if: ${{ github.event.issue.pull_request != null && contains(github.event.comment.body, '/optimize') }}
+    if: ${{ github.event.issue.pull_request && contains(github.event.comment.body, '/optimize') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
