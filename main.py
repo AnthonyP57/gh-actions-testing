@@ -4,5 +4,5 @@ def main():
 
 if __name__ == "__main__":
     import time
-    time.sleep(6)
+    time.sleep(5.5)
     main()
