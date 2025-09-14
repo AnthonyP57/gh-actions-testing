@@ -10,6 +10,10 @@ on:
         required: false
         default: 'main'
 
+permissions:
+  contents: read
+  pull-requests: write   # ✅ allow commenting on PRs
+
 jobs:
   benchmark:
     runs-on: ubuntu-latest
@@ -47,6 +51,7 @@ jobs:
         if: github.event_name == 'pull_request'
         uses: peter-evans/create-or-update-comment@v4
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           issue-number: ${{ github.event.pull_request.number }}
           body: |
             ## 🔬 Benchmark Results
