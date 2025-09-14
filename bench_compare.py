@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """
-Benchmark and compare performance between commits.
+Benchmark performance between branch base, branch head, and main.
 
 Usage:
   python bench_compare.py [base_branch]
+
+Default base_branch is 'main'.
 """
 
 import subprocess
@@ -31,10 +33,13 @@ def time_run(cmd, runs=5):
     return statistics.median(times)
 
 def benchmark_commit(commit, label, filepath="main.py"):
+    """
+    Temporarily checkout a commit, run the benchmark, and restore original HEAD.
+    """
     # Save current HEAD
     current_head = run_output("git rev-parse HEAD")
 
-    # Checkout the exact commit
+    # Checkout the commit
     subprocess.run(f"git checkout {commit}", shell=True, check=True)
 
     # Run benchmark
@@ -46,20 +51,19 @@ def benchmark_commit(commit, label, filepath="main.py"):
 
     return result
 
-
 if __name__ == "__main__":
     base_branch = sys.argv[1] if len(sys.argv) > 1 else "main"
 
-    # Ensure base branch exists (useful in CI)
+    # Ensure base branch exists
     subprocess.run(f"git fetch origin {base_branch}:{base_branch}", shell=True, check=False)
 
-    # Find merge base (common ancestor between branch and base)
+    # Find merge base (where branch diverged from main)
     merge_base = try_output(f"git merge-base {base_branch} HEAD")
     if not merge_base:
         print(f"ERROR: couldn't find merge-base with {base_branch}", file=sys.stderr)
         sys.exit(2)
 
-    # Branch start = first commit after merge-base on the branch
+    # Branch start = first commit after merge base
     branch_start = try_output(f"git rev-list --reverse {merge_base}..HEAD | head -n 1") or merge_base
 
     # Branch end = HEAD
@@ -68,31 +72,25 @@ if __name__ == "__main__":
     # Main = tip of base branch
     main_ref = f"origin/{base_branch}" if try_output(f"git rev-parse --verify origin/{base_branch}") else base_branch
 
-    # Preserve current main.py
-    saved_main = None
-    if os.path.exists("main.py"):
-        with open("main.py", "rb") as f:
-            saved_main = f.read()
-
     regress = False
     try:
-        # Benchmark commits
-        start = benchmark_commit(branch_start, "Branch start")
-        end   = benchmark_commit(branch_end, "Branch end")
-        main  = benchmark_commit(main_ref, "Main")
+        print("Running benchmarks...")
 
-        # Show comparison
+        start = benchmark_commit(branch_start, "Branch base (start)")
+        end   = benchmark_commit(branch_end, "Branch tip (HEAD)")
+        main  = benchmark_commit(main_ref, "Main branch tip")
+
         print("\n--- Performance Comparison ---")
-        print(f"Branch start: {start:.4f} s")
-        print(f"Branch end:   {end:.4f} s")
-        print(f"Main:         {main:.4f} s")
+        print(f"Branch base: {start:.4f} s")
+        print(f"Branch tip:  {end:.4f} s")
+        print(f"Main tip:    {main:.4f} s")
 
-        # Regression check
+        # Regression checks
         if end > start * 1.10:
-            print("❌ Regression vs branch start")
+            print("❌ Regression vs branch base")
             regress = True
         else:
-            print("✅ OK vs branch start")
+            print("✅ OK vs branch base")
 
         if end > main * 1.10:
             print("❌ Regression vs main")
@@ -101,13 +99,8 @@ if __name__ == "__main__":
             print("✅ OK vs main")
 
     finally:
-        # Restore main.py
-        try:
-            subprocess.run("git checkout HEAD -- main.py", shell=True, check=True)
-        except Exception:
-            if saved_main is not None:
-                with open("main.py", "wb") as f:
-                    f.write(saved_main)
+        # Restore HEAD in case of error
+        subprocess.run("git checkout HEAD", shell=True, check=False)
 
     if regress:
-        sys.exit(1)  # Indicate regression for CI
+        sys.exit(1)
