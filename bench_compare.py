@@ -41,6 +41,7 @@ if __name__ == "__main__":
         f"git rev-parse origin/{base_branch}",
         f"git rev-parse {base_branch}"
     ]
+
     base_commit = None
     for c in candidates:
         val = try_output(c)
@@ -59,12 +60,26 @@ if __name__ == "__main__":
 
     regress = False
     try:
-        start = benchmark_commit(base_commit, "Branch start")
-        end   = benchmark_commit("HEAD", "Branch end")
 
-        # Main reference
-        main_ref = "origin/" + base_branch if try_output(f"git rev-parse --verify origin/{base_branch}") else base_branch
+        # Find merge base (common ancestor)
+        merge_base = try_output(f"git merge-base origin/{base_branch} HEAD")
+        if not merge_base:
+            print(f"ERROR: couldn't find merge-base with {base_branch}", file=sys.stderr)
+            sys.exit(2)
+
+        # Branch start = first commit after merge-base on the PR branch
+        branch_start = try_output(f"git rev-list {merge_base}..HEAD | tail -n 1") or merge_base
+
+        # Branch end = HEAD
+        branch_end = "HEAD"
+
+        # Main = tip of base branch
+        main_ref = f"origin/{base_branch}" if try_output(f"git rev-parse --verify origin/{base_branch}") else base_branch
+
+        start = benchmark_commit(branch_start, "Branch start")
+        end   = benchmark_commit(branch_end, "Branch end")
         main  = benchmark_commit(main_ref, "Main")
+
 
         print("\n--- Performance Comparison ---")
         print(f"Branch start: {start:.4f} s")
