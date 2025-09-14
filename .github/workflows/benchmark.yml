@@ -33,10 +33,14 @@ jobs:
         name: Run benchmark comparison
         run: |
           BASE="${{ github.event.inputs.base-branch || 'main' }}"
+          set -o pipefail
           python bench_compare.py "$BASE" | tee bench_results.txt
+          exit_code=${PIPESTATUS[0]}
           echo "results<<EOF" >> $GITHUB_OUTPUT
           cat bench_results.txt >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+          exit $exit_code
+
 
       - name: Upload benchmark results
         uses: actions/upload-artifact@v4

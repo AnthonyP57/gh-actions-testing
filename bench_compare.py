@@ -83,13 +83,13 @@ if __name__ == "__main__":
         else:
             print("✅ OK vs main")
 
-    # finally:
-    #     try:
-    #         subprocess.run("git checkout HEAD -- main.py", shell=True, check=True)
-    #     except Exception:
-    #         if saved_main is not None:
-    #             with open("main.py", "wb") as f:
-    #                 f.write(saved_main)
+    finally:
+        try:
+            subprocess.run("git checkout HEAD -- main.py", shell=True, check=True)
+        except Exception:
+            if saved_main is not None:
+                with open("main.py", "wb") as f:
+                    f.write(saved_main)
 
     if regress:
         sys.exit(1)  # must be OUTSIDE the finally
