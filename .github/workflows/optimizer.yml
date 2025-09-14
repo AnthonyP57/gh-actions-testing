@@ -6,24 +6,29 @@ on:
 
 jobs:
   optimizer:
-    if: github.event.issue.pull_request != null && github.event.comment.body == '/optimize'
+    # run only when the comment is on a PR and contains "/optimize"
+    if: ${{ github.event.issue.pull_request != null && contains(github.event.comment.body, '/optimize') }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - name: Install dependencies (optional)
+        run: |
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
       - name: Run optimizer
         run: python optimizer.py > optimizer_results.txt
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload optimizer results
+        uses: actions/upload-artifact@v4
         with:
           name: optimizer-results
           path: optimizer_results.txt

@@ -6,3 +6,6 @@ bench-main:
 
 bench-dev:
 	python bench_compare.py develop
+
+optimize:
+	python optimizer.py
