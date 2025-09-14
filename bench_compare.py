@@ -31,11 +31,21 @@ def time_run(cmd, runs=5):
     return statistics.median(times)
 
 def benchmark_commit(commit, label, filepath="main.py"):
-    # Checkout the file from the specific commit
-    subprocess.run(f"git checkout {commit} -- {filepath}", shell=True, check=True)
+    # Save current HEAD
+    current_head = run_output("git rev-parse HEAD")
+
+    # Checkout the exact commit
+    subprocess.run(f"git checkout {commit}", shell=True, check=True)
+
+    # Run benchmark
     result = time_run(f"python {filepath}")
     print(f"{label}: {result:.4f} s")
+
+    # Restore original HEAD
+    subprocess.run(f"git checkout {current_head}", shell=True, check=True)
+
     return result
+
 
 if __name__ == "__main__":
     base_branch = sys.argv[1] if len(sys.argv) > 1 else "main"
