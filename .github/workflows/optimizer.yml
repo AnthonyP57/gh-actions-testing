@@ -10,10 +10,10 @@ permissions:
 
 jobs:
   optimizer:
-    # Run only when comment is on a PR and starts with /optimize
+    # Run only when comment is on a PR and contains "/optimize"
     if: >
       github.event.issue.pull_request != null &&
-      startsWith(github.event.comment.body, '/optimize')
+      contains(github.event.comment.body, '/optimize')
     runs-on: ubuntu-latest
 
     steps:
@@ -39,6 +39,9 @@ jobs:
         with:
           name: optimizer-results
           path: optimizer_results.txt
+
+      - name: Install GitHub CLI
+        run: sudo apt-get install -y gh
 
       - name: Comment results on PR
         run: |
