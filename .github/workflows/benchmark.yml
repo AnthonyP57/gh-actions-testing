@@ -32,18 +32,19 @@ jobs:
 
       - id: benchmark
         name: Run benchmark comparison
+        continue-on-error: true   # <-- do not fail the job yet
         run: |
           BASE="${{ github.event.inputs.base-branch || 'main' }}"
           set -o pipefail
           python bench_compare.py "$BASE" | tee bench_results.txt
           exit_code=${PIPESTATUS[0]}
 
-          # Save benchmark results to output
+          # Save benchmark results for later
           echo "results<<EOF" >> $GITHUB_OUTPUT
           cat bench_results.txt >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-          # Save exit code for later
+          # Save exit code for final step
           echo $exit_code > .exit_code
 
       - name: Upload benchmark results
