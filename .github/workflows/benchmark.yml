@@ -1,0 +1,94 @@
+name: Benchmark main.py
+
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:       # allow manual trigger
+    inputs:
+      base-branch:
+        description: 'Base branch to compare against (default: main)'
+        required: false
+        default: 'main'
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # need full history to find merge-base
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # -----------------------------
+      # Branch start benchmark
+      # -----------------------------
+      - name: Benchmark branch start
+        run: |
+          BASE_BRANCH="${{ github.event.inputs.base-branch || 'main' }}"
+          BASE_COMMIT=$(git merge-base origin/$BASE_BRANCH HEAD)
+          echo "Branch base commit: $BASE_COMMIT"
+          git checkout $BASE_COMMIT -- main.py
+          python benchmark.py > start.txt
+
+      # -----------------------------
+      # Branch end (PR head or current branch HEAD)
+      # -----------------------------
+      - name: Benchmark branch end
+        run: |
+          git checkout HEAD -- main.py
+          python benchmark.py > end.txt
+
+      # -----------------------------
+      # Benchmark current main branch
+      # -----------------------------
+      - name: Benchmark main branch
+        run: |
+          BASE_BRANCH="${{ github.event.inputs.base-branch || 'main' }}"
+          git checkout origin/$BASE_BRANCH -- main.py
+          python benchmark.py > main.txt
+
+      # -----------------------------
+      # Compare Results
+      # -----------------------------
+      - name: Compare results
+        run: |
+          START=$(cat start.txt)
+          END=$(cat end.txt)
+          MAIN=$(cat main.txt)
+
+          echo "Branch start runtime: $START s"
+          echo "Branch end runtime:   $END s"
+          echo "Current main runtime: $MAIN s"
+
+          python - <<EOF
+          start = float("$START")
+          end = float("$END")
+          main = float("$MAIN")
+
+          print("--- Performance Comparison ---")
+          print(f"Branch start: {start:.4f} s")
+          print(f"Branch end:   {end:.4f} s")
+          print(f"Main:         {main:.4f} s")
+
+          problems = []
+          if end > start * 1.10:
+              problems.append(f"❌ Regression vs branch start: {end:.4f}s vs {start:.4f}s")
+          else:
+              print(f"✅ OK vs branch start: {end:.4f}s vs {start:.4f}s")
+
+          if end > main * 1.10:
+              problems.append(f"❌ Regression vs main: {end:.4f}s vs {main:.4f}s")
+          else:
+              print(f"✅ OK vs main: {end:.4f}s vs {main:.4f}s")
+
+          if problems:
+              raise SystemExit("\\n".join(problems))
+          EOF
