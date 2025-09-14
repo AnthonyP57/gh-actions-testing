@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
 """
-Robust bench_compare.py
+Benchmark and compare performance between commits.
 
 Usage:
   python bench_compare.py [base_branch]
-
-Behavior:
-- Attempts multiple strategies to resolve the base commit (origin/main, main, etc).
-- Checks out main.py from different commits and times running it (median of runs).
-- Restores main.py at the end.
 """
 import subprocess, time, statistics, sys, os
 
@@ -39,7 +34,7 @@ def benchmark_commit(commit, label, filepath="main.py"):
 if __name__ == "__main__":
     base_branch = sys.argv[1] if len(sys.argv) > 1 else "main"
 
-    # Try multiple ways to resolve a usable base commit
+    # Resolve base commit
     candidates = [
         f"git merge-base origin/{base_branch} HEAD",
         f"git merge-base {base_branch} HEAD",
@@ -57,23 +52,18 @@ if __name__ == "__main__":
         print(f"ERROR: couldn't resolve base commit for branch '{base_branch}'", file=sys.stderr)
         sys.exit(2)
 
-    # Save current main.py content (if present) so we can restore it if needed
     saved_main = None
     if os.path.exists("main.py"):
         with open("main.py", "rb") as f:
             saved_main = f.read()
 
+    regress = False
     try:
         start = benchmark_commit(base_commit, "Branch start")
         end   = benchmark_commit("HEAD", "Branch end")
 
-        # For "Main" try origin/{base_branch} if it exists, else fall back to base_branch
-        main_ref = None
-        if try_output(f"git rev-parse --verify origin/{base_branch}"):
-            main_ref = f"origin/{base_branch}"
-        else:
-            main_ref = base_branch
-
+        # Main reference
+        main_ref = "origin/" + base_branch if try_output(f"git rev-parse --verify origin/{base_branch}") else base_branch
         main  = benchmark_commit(main_ref, "Main")
 
         print("\n--- Performance Comparison ---")
@@ -83,19 +73,23 @@ if __name__ == "__main__":
 
         if end > start * 1.10:
             print("❌ Regression vs branch start")
+            regress = True
         else:
             print("✅ OK vs branch start")
 
         if end > main * 1.10:
             print("❌ Regression vs main")
+            regress = True
         else:
             print("✅ OK vs main")
 
     finally:
-        # try to restore main.py from HEAD; if that fails, restore the saved content
         try:
             subprocess.run("git checkout HEAD -- main.py", shell=True, check=True)
         except Exception:
             if saved_main is not None:
                 with open("main.py", "wb") as f:
                     f.write(saved_main)
+
+    if regress:
+        sys.exit(1)  # Fail workflow → block merge

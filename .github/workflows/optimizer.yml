@@ -6,7 +6,6 @@ on:
 
 jobs:
   optimizer:
-    # run only when the comment is on a PR and contains "/optimize"
     if: ${{ github.event.issue.pull_request != null && contains(github.event.comment.body, '/optimize') }}
     runs-on: ubuntu-latest
     steps:
@@ -25,10 +24,25 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
       - name: Run optimizer
-        run: python optimizer.py > optimizer_results.txt
+        id: optimizer
+        run: |
+          python optimizer.py | tee optimizer_results.txt
+          echo "results<<EOF" >> $GITHUB_OUTPUT
+          cat optimizer_results.txt >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Upload optimizer results
         uses: actions/upload-artifact@v4
         with:
           name: optimizer-results
           path: optimizer_results.txt
+
+      - name: Comment optimizer results on PR
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.issue.number }}
+          body: |
+            ## ⚡ Optimizer Results
+            ```
+            ${{ steps.optimizer.outputs.results }}
+            ```

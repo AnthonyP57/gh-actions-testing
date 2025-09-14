@@ -28,13 +28,28 @@ jobs:
         run: |
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      - name: Run benchmark comparison
+      - id: benchmark
+        name: Run benchmark comparison
         run: |
           BASE="${{ github.event.inputs.base-branch || 'main' }}"
-          python bench_compare.py "$BASE" > bench_results.txt
+          python bench_compare.py "$BASE" | tee bench_results.txt
+          echo "results<<EOF" >> $GITHUB_OUTPUT
+          cat bench_results.txt >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Upload benchmark results
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-results
           path: bench_results.txt
+
+      - name: Comment results on PR
+        if: github.event_name == 'pull_request'
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            ## 🔬 Benchmark Results
+            ```
+            ${{ steps.benchmark.outputs.results }}
+            ```
