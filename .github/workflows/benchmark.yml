@@ -10,9 +10,15 @@ on:
         required: false
         default: 'main'
 
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
 jobs:
   benchmark:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -24,17 +30,33 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install dependencies (optional)
-        run: |
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-
-      - name: Run benchmark comparison
+      - id: benchmark
+        name: Run benchmark comparison
+        continue-on-error: true
         run: |
           BASE="${{ github.event.inputs.base-branch || 'main' }}"
-          python bench_compare.py "$BASE" > bench_results.txt
+          set -o pipefail
+          python bench_compare.py "$BASE" | tee bench_results.txt
+          echo $? > .exit_code
 
       - name: Upload benchmark results
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-results
           path: bench_results.txt
+
+      - name: Comment results on PR
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "## 🔬 Benchmark Results" > comment.md
+          echo '```' >> comment.md
+          cat bench_results.txt >> comment.md
+          echo '```' >> comment.md
+
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --body-file comment.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fail if regression detected
+        run: exit $(cat .exit_code)
